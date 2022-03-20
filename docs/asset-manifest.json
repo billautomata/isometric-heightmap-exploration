@@ -1,16 +1,16 @@
 {
   "files": {
-    "main.css": "/static/css/main.073c9b0a.css",
-    "main.js": "/static/js/main.de36b690.js",
-    "static/js/787.8350ec00.chunk.js": "/static/js/787.8350ec00.chunk.js",
-    "static/media/logo.svg": "/static/media/logo.6ce24c58023cc2f8fd88fe9d219db6c6.svg",
-    "index.html": "/index.html",
-    "main.073c9b0a.css.map": "/static/css/main.073c9b0a.css.map",
-    "main.de36b690.js.map": "/static/js/main.de36b690.js.map",
-    "787.8350ec00.chunk.js.map": "/static/js/787.8350ec00.chunk.js.map"
+    "main.css": "/isometric-heightmap-exploration/static/css/main.073c9b0a.css",
+    "main.js": "/isometric-heightmap-exploration/static/js/main.94c3fea3.js",
+    "static/js/787.8350ec00.chunk.js": "/isometric-heightmap-exploration/static/js/787.8350ec00.chunk.js",
+    "static/media/logo.svg": "/isometric-heightmap-exploration/static/media/logo.6ce24c58023cc2f8fd88fe9d219db6c6.svg",
+    "index.html": "/isometric-heightmap-exploration/index.html",
+    "main.073c9b0a.css.map": "/isometric-heightmap-exploration/static/css/main.073c9b0a.css.map",
+    "main.94c3fea3.js.map": "/isometric-heightmap-exploration/static/js/main.94c3fea3.js.map",
+    "787.8350ec00.chunk.js.map": "/isometric-heightmap-exploration/static/js/787.8350ec00.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.073c9b0a.css",
-    "static/js/main.de36b690.js"
+    "static/js/main.94c3fea3.js"
   ]
 }
