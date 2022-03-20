@@ -42,6 +42,21 @@ export default function go() {
     controls.screenSpacePanning = true //so that panning up and down doesn't zoom in/out
     //controls.addEventListener('change', render)
 
+
+    const viking = new THREE.Mesh(
+        new THREE.PlaneBufferGeometry(1, 1, 4, 4), 
+        new THREE.MeshBasicMaterial({ 
+            map: new THREE.TextureLoader().load('./viking.png'),
+            alphaMap: new THREE.TextureLoader().load('./viking-alpha.png'),
+            transparent: true
+            // side: THREE.Side.DoubleSide
+        })
+    )
+    viking.scale.set(0.1,0.1,1)
+    viking.position.set(0,0,0.58)
+    viking.castShadow = true
+    scene.add(viking)
+
     const planeGeometry = new THREE.PlaneGeometry(3.84, 2.16, 384, 216)
 
     const sz = 1.0
@@ -201,6 +216,8 @@ export default function go() {
             r * Math.cos(sunData.sunRotation),
             sunData.sunHeight,
         )
+        viking.position.set(0.1,0,0.55*material.displacementScale + 0.03)
+        viking.lookAt(camera.position)
         light.lookAt(scene.position)
         renderer.render(scene, camera)
     }
