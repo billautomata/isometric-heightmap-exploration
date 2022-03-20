@@ -4,40 +4,27 @@ import Stats from 'three/examples/jsm/libs/stats.module'
 import { GUI } from 'dat.gui'
 
 export default function go() {
-
     const scene = new THREE.Scene()
     scene.add(new THREE.AxesHelper(5))
 
-    // const light = new THREE.PointLight(0xffffff, 1)
-    // light.position.set(0, 5, 10)
-
-    const light = new THREE.DirectionalLight(0xffffff, 3)
+    const light = new THREE.DirectionalLight(0xffffff, 2)
     light.position.set(5, 0, 3)
     light.lookAt(scene.position)
     light.castShadow = true
 
     //Set up shadow properties for the light
-    light.shadow.mapSize.width = 2048;
-    light.shadow.mapSize.height = 2048;
-    light.shadow.camera.near = 0.5; // default
-    light.shadow.camera.far = 500; // default
-
-    // const helper = new THREE.CameraHelper(light.shadow.camera);
-    // scene.add(helper);
+    light.shadow.mapSize.width = 4096;
+    light.shadow.mapSize.height = 4096;
+    light.shadow.camera.near = 15;     // default
+    light.shadow.camera.far = 50;      // default
 
     scene.add(light)
 
-    const width = window.innerWidth / 300
-    const height = window.innerHeight / 300
+    const _size = 500
+    const width = window.innerWidth / _size
+    const height = window.innerHeight / _size
 
     const camera = new THREE.OrthographicCamera(width / - 2, width / 2, height / 2, height / - 2, 1, 1000);
-
-    // const camera = new THREE.PerspectiveCamera(
-    //     75,
-    //     window.innerWidth / window.innerHeight,
-    //     0.1,
-    //     1000
-    // )
     const a = 100
     camera.position.y = -a
     camera.position.z = a * Math.sqrt(3)
@@ -45,6 +32,7 @@ export default function go() {
     const renderer = new THREE.WebGLRenderer()
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // renderer.shadowMap.type = THREE.BasicShadowMap;
 
     renderer.setSize(window.innerWidth, window.innerHeight)
 
@@ -60,21 +48,10 @@ export default function go() {
     planeGeometry.scale(sz, sz, sz)
 
     const material = new THREE.MeshPhongMaterial()
-
-    //const texture = new THREE.TextureLoader().load("img/grid.png")
     const texture = new THREE.TextureLoader().load('./color.png')
     material.map = texture
-    // const envTexture = new THREE.CubeTextureLoader().load(["img/px_50.png", "img/nx_50.png", "img/py_50.png", "img/ny_50.png", "img/pz_50.png", "img/nz_50.png"])
-    // const envTexture = new THREE.CubeTextureLoader().load(["img/px_eso0932a.jpg", "img/nx_eso0932a.jpg", "img/py_eso0932a.jpg", "img/ny_eso0932a.jpg", "img/pz_eso0932a.jpg", "img/nz_eso0932a.jpg"])
-    // envTexture.mapping = THREE.CubeReflectionMapping
-    // material.envMap = envTexture
 
-    //const specularTexture = new THREE.TextureLoader().load("img/earthSpecular.jpg")
-    // material.specularMap = specularTexture
-
-    const displacementMap = new THREE.TextureLoader().load(
-        './height.png'
-    )
+    const displacementMap = new THREE.TextureLoader().load('./height.png')
     material.displacementMap = displacementMap
 
     const plane: THREE.Mesh = new THREE.Mesh(planeGeometry, material)
@@ -104,20 +81,21 @@ export default function go() {
         },
     }
     const gui = new GUI()
+    gui.width = 400
 
-    const materialFolder = gui.addFolder('THREE.Material')
-    materialFolder.add(material, 'transparent').onChange(() => material.needsUpdate = true)
-    materialFolder.add(material, 'opacity', 0, 1, 0.01)
-    materialFolder.add(material, 'depthTest')
-    materialFolder.add(material, 'depthWrite')
-    materialFolder
-        .add(material, 'alphaTest', 0, 1, 0.01)
-        .onChange(() => updateMaterial())
-    materialFolder.add(material, 'visible')
-    materialFolder
-        .add(material, 'side', options.side)
-        .onChange(() => updateMaterial())
-    //materialFolder.open()
+    // const materialFolder = gui.addFolder('THREE.Material')
+    // materialFolder.add(material, 'transparent').onChange(() => material.needsUpdate = true)
+    // materialFolder.add(material, 'opacity', 0, 1, 0.01)
+    // materialFolder.add(material, 'depthTest')
+    // materialFolder.add(material, 'depthWrite')
+    // materialFolder
+    //     .add(material, 'alphaTest', 0, 1, 0.01)
+    //     .onChange(() => updateMaterial())
+    // materialFolder.add(material, 'visible')
+    // materialFolder
+    //     .add(material, 'side', options.side)
+    //     .onChange(() => updateMaterial())
+    // //materialFolder.open()
 
     const data = {
         color: material.color.getHex(),
@@ -125,36 +103,36 @@ export default function go() {
         specular: material.specular.getHex(),
     }
 
-    const meshPhongMaterialFolder = gui.addFolder('THREE.meshPhongMaterialFolder')
+    // const meshPhongMaterialFolder = gui.addFolder('THREE.meshPhongMaterialFolder')
 
-    meshPhongMaterialFolder.addColor(data, 'color').onChange(() => {
-        material.color.setHex(Number(data.color.toString().replace('#', '0x')))
-    })
-    meshPhongMaterialFolder.addColor(data, 'emissive').onChange(() => {
-        material.emissive.setHex(
-            Number(data.emissive.toString().replace('#', '0x'))
-        )
-    })
-    meshPhongMaterialFolder.addColor(data, 'specular').onChange(() => {
-        material.specular.setHex(
-            Number(data.specular.toString().replace('#', '0x'))
-        )
-    })
-    meshPhongMaterialFolder.add(material, 'shininess', 0, 1024)
-    meshPhongMaterialFolder.add(material, 'wireframe')
-    meshPhongMaterialFolder
-        .add(material, 'flatShading')
-        .onChange(() => updateMaterial())
-    meshPhongMaterialFolder.add(material, 'reflectivity', 0, 1)
-    meshPhongMaterialFolder.add(material, 'refractionRatio', 0, 1)
-    meshPhongMaterialFolder.add(material, 'displacementScale', 0, 1, 0.01)
-    meshPhongMaterialFolder.add(material, 'displacementBias', -1, 1, 0.01)
-    meshPhongMaterialFolder.open()
+    // meshPhongMaterialFolder.addColor(data, 'color').onChange(() => {
+    //     material.color.setHex(Number(data.color.toString().replace('#', '0x')))
+    // })
+    // meshPhongMaterialFolder.addColor(data, 'emissive').onChange(() => {
+    //     material.emissive.setHex(
+    //         Number(data.emissive.toString().replace('#', '0x'))
+    //     )
+    // })
+    // meshPhongMaterialFolder.addColor(data, 'specular').onChange(() => {
+    //     material.specular.setHex(
+    //         Number(data.specular.toString().replace('#', '0x'))
+    //     )
+    // })
+    // meshPhongMaterialFolder.add(material, 'shininess', 0, 1024)
+    // meshPhongMaterialFolder.add(material, 'wireframe')
+    // meshPhongMaterialFolder
+    //     .add(material, 'flatShading')
+    //     .onChange(() => updateMaterial())
+    // meshPhongMaterialFolder.add(material, 'reflectivity', 0, 1)
+    // meshPhongMaterialFolder.add(material, 'refractionRatio', 0, 1)
 
-    function updateMaterial() {
-        material.side = Number(material.side)
-        material.needsUpdate = true
-    }
+    // meshPhongMaterialFolder.add(material, 'displacementBias', -1, 1, 0.01)
+    // meshPhongMaterialFolder.open()
+
+    // function updateMaterial() {
+    //     material.side = Number(material.side)
+    //     material.needsUpdate = true
+    // }
 
     const planeData = {
         width: 3.6,
@@ -163,17 +141,39 @@ export default function go() {
         heightSegments: 180,
     }
 
-    const planePropertiesFolder = gui.addFolder('PlaneGeometry')
+    // const planePropertiesFolder = gui.addFolder('PlaneGeometry')
+    // //planePropertiesFolder.add(planeData, 'width', 1, 30).onChange(regeneratePlaneGeometry)
+    // //planePropertiesFolder.add(planeData, 'height', 1, 30).onChange(regeneratePlaneGeometry)
+    // planePropertiesFolder
+    //     .add(planeData, 'widthSegments', 1, 360 * 3)
+    //     .onChange(regeneratePlaneGeometry)
+    // planePropertiesFolder
+    //     .add(planeData, 'heightSegments', 1, 180 * 3)
+    //     .onChange(regeneratePlaneGeometry)
+    // // planePropertiesFolder.open()
+
+    const sunData = {
+        sunRotation: Math.PI,
+        sunHeight: 10
+    }
+
+
+    const sunFolder = gui.addFolder('Settings')
     //planePropertiesFolder.add(planeData, 'width', 1, 30).onChange(regeneratePlaneGeometry)
     //planePropertiesFolder.add(planeData, 'height', 1, 30).onChange(regeneratePlaneGeometry)
-    planePropertiesFolder
-        .add(planeData, 'widthSegments', 1, 360)
-        .onChange(regeneratePlaneGeometry)
-    planePropertiesFolder
-        .add(planeData, 'heightSegments', 1, 180)
-        .onChange(regeneratePlaneGeometry)
-    planePropertiesFolder.open()
+    sunFolder
+        .add(sunData, 'sunRotation', 0, Math.PI * 2.0)
+    // .onChange(regeneratePlaneGeometry)
+    sunFolder
+        .add(sunData, 'sunHeight', 1, 40)
+    // .onChange(regeneratePlaneGeometry)
 
+    sunFolder.add(material, 'displacementScale', 0, 4, 0.01)
+
+    sunFolder.open()
+
+
+    /////////////////////////////////////////
     function regeneratePlaneGeometry() {
         const newGeometry = new THREE.PlaneGeometry(
             planeData.width,
@@ -194,6 +194,14 @@ export default function go() {
     }
 
     function render() {
+        const m = 0.001
+        const r = 20
+        light.position.set(
+            r * Math.sin(sunData.sunRotation),
+            r * Math.cos(sunData.sunRotation),
+            sunData.sunHeight,
+        )
+        light.lookAt(scene.position)
         renderer.render(scene, camera)
     }
 
