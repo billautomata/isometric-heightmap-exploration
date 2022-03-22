@@ -8,16 +8,29 @@ import * as async from 'async'
 
 PIXI.settings.WRAP_MODE = PIXI.WRAP_MODES.REPEAT
 
-const range = 48
+const range = 8
 const cameraDistance = 300
 const chunkSize = 512
 const meshSize = 10
-const meshVerts = 32
-const displacementScale = 10
+const meshVerts = 128
+const displacementScale = 20
+
+const spawnPoint = { x: 33263, y: 43986 }
+
+// spawnPoint.x = 65536 / 2
+// spawnPoint.y = 65536 / 2
+
+const step3Buffer = new ArrayBuffer(chunkSize * chunkSize * 4)
+const step3Pixels = new Uint8Array(step3Buffer)
 
 export default function allSteps() {
 
     PIXI.Loader.shared.add('texture_id_assign_frag', `./isometric-heightmap-exploration/textureIdAssign.frag`)
+    PIXI.Loader.shared.add('texture_id_to_ng_frag', `./isometric-heightmap-exploration/textureIdToNG.frag`)
+    PIXI.Loader.shared.add('texture_dirt', './isometric-heightmap-exploration/infiniworld/dirt.png')
+    PIXI.Loader.shared.add('texture_grass', './isometric-heightmap-exploration/infiniworld/grass.png')
+    PIXI.Loader.shared.add('texture_rock', './isometric-heightmap-exploration/infiniworld/rock.png')
+    PIXI.Loader.shared.concurrency = 20
 
     const appStep1 = new PIXI.Application({
         width: chunkSize,
@@ -28,29 +41,61 @@ export default function allSteps() {
 
     document.querySelector('.pixi-step-1').appendChild(appStep1.view)
 
+    const appStep2 = new PIXI.Application({
+        width: chunkSize,
+        height: chunkSize,
+        backgroundColor: 0xFFFF00,
+        resolution: 1
+    })
+
+    const viewSprite = new PIXI.Sprite()
+
+    document.querySelector('.pixi-step-2').appendChild(appStep2.view)
+
     // threejs section
     const scene = new THREE.Scene()
-    scene.add(new THREE.AxesHelper(5))
+    // scene.add(new THREE.AxesHelper(5))
 
     const baseObj = new THREE.Object3D()
     scene.add(baseObj)
 
-    const light = new THREE.DirectionalLight(0xffffff, 2)
-    light.position.set(0, 3, 3)
-    light.lookAt(baseObj.position)
-    light.castShadow = true
+    // const light = new THREE.DirectionalLight(0xffffff, 1)
+    // light.position.set(0, 0, 30)
+    // light.lookAt(baseObj.position)
+    // light.castShadow = true
     // baseObj.add(light)
+
+    // const spotlight = new THREE.SpotLight(0xffffff, 2, 300, Math.PI*0.15)
+    // spotlight.position.set(10, 100, 100)
+    // spotlight.lookAt(baseObj.position)
+    // spotlight.castShadow = true
+    // baseObj.add(spotlight)
+    // spotlight.shadow.mapSize.width = 4096;
+    // spotlight.shadow.mapSize.height = 4096;
+    // spotlight.shadow.camera.near = 0.01;     // default
+    // spotlight.shadow.camera.far = 30;      // default
+    // spotlight.shadow.camera.fov = 30;
+    // const spotlightHelper = new THREE.SpotLightHelper(spotlight)
+    // baseObj.add(spotlightHelper)
 
     const lamp = new THREE.AmbientLight(0xFFFFFF, 1)
     scene.add(lamp)
 
-    //Set up shadow properties for the light
-    light.shadow.mapSize.width = 1024;
-    light.shadow.mapSize.height = 1024;
-    light.shadow.camera.near = 1;     // default
-    light.shadow.camera.far = 500;      // default
+    const pointlight = new THREE.PointLight(0xFFFFFF, 2.0)
+    // pointlight.castShadow = true
+    pointlight.position.set(0, 0, 60)
 
-    const width = (range+2) * meshSize
+    pointlight.shadow.mapSize.width = 4096;
+    pointlight.shadow.mapSize.height = 4096;
+    // pointlight.shadow.camera.near = 0.01;     // default
+    // pointlight.shadow.camera.far = 30;      // default
+    // pointlight.shadow.camera.fov = 30;
+
+    // baseObj.add(pointlight)
+
+    //Set up shadow properties for the light
+
+    const width = (range * 1.9) * meshSize
     const height = width
 
     const camera = new THREE.OrthographicCamera(width / - 2, width / 2, height / 2, height / - 2, 0.001, 1000);
@@ -58,37 +103,92 @@ export default function allSteps() {
     camera.position.y = -a
     camera.position.z = a * Math.sqrt(3)
 
-    const renderer = new THREE.WebGLRenderer()
-    // renderer.WRAP_MODE
+    const renderer = new THREE.WebGLRenderer({ preserveDrawingBuffer: true, autoClear: true })
+    const threejsCtx = renderer.getContext()
+    console.log('context', threejsCtx)
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // renderer.shadowMap.type = THREE.BasicShadowMap;
 
-    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.setSize(512, 512)
 
     document.querySelector('.three-displace-step').appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
     // controls.screenSpacePanning = true //so that panning up and down doesn't zoom in/out
-    controls.addEventListener('change', () => { renderer.render(scene, camera) })
+    controls.addEventListener('change', () => { 
+        renderer.render(scene, camera) 
+        renderer.context.readPixels(0, 0, 512, 512, threejsCtx.RGBA, threejsCtx.UNSIGNED_BYTE, step3Pixels)
+        viewSprite.texture = PIXI.Texture.fromBuffer(step3Pixels, 512, 512)
+    })
 
-    const spawnPoint = { x: 33263, y: 33986 }
     const position = { x: spawnPoint.x, y: spawnPoint.y }
-    // const position = { x: 64 * chunkSize, y: 64 * chunkSize }
+    const chunkCenter = range
 
     const fns = []
-    for (let x = 0; x < range; ++x) {
-        for (let y = 0; y < range; ++y) {
-            fns.push((done) => {
-                generateChunk(position, { x: x - Math.round(range / 2), y: y - Math.round(range / 2) }, done)
-            })
+    for (let x = 0; x <= range * 2; ++x) {
+        for (let y = 0; y <= range * 2; ++y) {
+            addChunkToPixiLoader(position, { x: x - chunkCenter, y: y - chunkCenter })
         }
     }
 
-    async.series(fns)
+    PIXI.Loader.shared.load(() => {        
+        const finalPassUniforms = {
+            uRock: PIXI.Texture.from(PIXI.Loader.shared.resources.texture_rock.data),
+            uGrass: PIXI.Texture.from(PIXI.Loader.shared.resources.texture_grass.data),
+            uDirt: PIXI.Texture.from(PIXI.Loader.shared.resources.texture_dirt.data),
+            texScale: range
+        }
+        const finalPassFilter = new PIXI.Filter(undefined, PIXI.Loader.shared.resources.texture_id_to_ng_frag.data, finalPassUniforms)
 
-    function generateChunk(pos, chunkOffset, callback) {
-        document.querySelector('.pixi-step-1').style.display = 'block'
+        for (let x = 0; x <= range * 2; ++x) {
+            for (let y = 0; y <= range * 2; ++y) {
+                fns.push((done) => {
+                    generateChunk(position, { x: x - chunkCenter, y: y - chunkCenter }, done)
+                })
+            }
+        }
+
+        fns.push(done => {
+            setTimeout(() => {
+                finalRender()
+                done()
+            }, 100)
+        })
+
+        function finalRender() {
+            renderer.render(scene, camera)
+            renderer.context.readPixels(0, 0, 512, 512, threejsCtx.RGBA, threejsCtx.UNSIGNED_BYTE, step3Pixels)
+            // const viewSprite = new PIXI.Sprite()
+            viewSprite.texture = PIXI.Texture.fromBuffer(step3Pixels, 512, 512)
+            viewSprite.filters = [finalPassFilter]
+            viewSprite.anchor.set(0.5, 0.5)
+            viewSprite.position.set(chunkSize / 2, chunkSize / 2)
+            viewSprite.scale.set(1, -1)
+            appStep2.stage.addChild(viewSprite)
+        }
+
+        async.series(fns)
+
+    })
+
+
+
+    function addChunkToPixiLoader(pos, chunkOffset) {
+        // document.querySelector('.pixi-step-1').style.display = 'block'
+        const chunk = { x: Math.floor(position.x / chunkSize), y: Math.floor(position.y / chunkSize) }
+        chunk.x += chunkOffset.x
+        chunk.y += chunkOffset.y
+        const chunkURL = `chunk_${String(chunk.x).padStart(4, '0')}_${String(chunk.y).padStart(4, '0')}`
+
+        // console.log(chunk, chunkURL)
+
+        PIXI.Loader.shared.add(`height_${chunkURL}`, `./isometric-heightmap-exploration/infiniworld/output/${chunkURL}.png`)
+        PIXI.Loader.shared.add(`steep_${chunkURL}`, `./isometric-heightmap-exploration/infiniworld/output2/${chunkURL}.png`)
+    }
+
+    function generateChunk(pos, chunkOffset, callback, render) {
+        // document.querySelector('.pixi-step-1').style.display = 'block'
         const chunk = { x: Math.floor(position.x / chunkSize), y: Math.floor(position.y / chunkSize) }
         chunk.x += chunkOffset.x
         chunk.y += chunkOffset.y
@@ -96,110 +196,79 @@ export default function allSteps() {
 
         console.log(chunk, chunkURL)
 
-        PIXI.Loader.shared.add(`height_${chunkURL}`, `./isometric-heightmap-exploration/infiniworld/output/${chunkURL}.png`)
-        PIXI.Loader.shared.add(`steep_${chunkURL}`, `./isometric-heightmap-exploration/infiniworld/output2/${chunkURL}.png`)
+        const heightTexture = PIXI.Texture.from(PIXI.Loader.shared.resources[`height_${chunkURL}`].data)
+        const heightBaseTexture = heightTexture.castToBaseTexture()
+        console.log(heightBaseTexture)
+        const steepTexture = PIXI.Texture.from(PIXI.Loader.shared.resources[`steep_${chunkURL}`].data)
 
-        PIXI.Loader.shared.load(() => {
+        const effects = new PIXI.Container()
+        effects.filterArea = new PIXI.Rectangle(0, 0, 512, 512)
 
-            const heightTexture = PIXI.Texture.from(PIXI.Loader.shared.resources[`height_${chunkURL}`].data)
-            const steepTexture = PIXI.Texture.from(PIXI.Loader.shared.resources[`steep_${chunkURL}`].data)
+        const textureIdUniforms = {
+            uHeight: heightTexture,
+            uSteep: steepTexture,
+            steepLimit: 0.2,
+            waterLimit: 0.01,
+            dirtLimit: 0.3,
+            grassLimit: 0.7
+        }
 
-            const effects = new PIXI.Container()
-            effects.filterArea = new PIXI.Rectangle(0, 0, 512, 512)
+        const textureIdFilter = new PIXI.Filter(undefined, PIXI.Loader.shared.resources.texture_id_assign_frag.data, textureIdUniforms)
+        effects.filters = [textureIdFilter]
 
-            const textureIdUniforms = {
-                uHeight: heightTexture,
-                uSteep: steepTexture,
-                steepLimit: 0.5,
-                waterLimit: 0.01,
-                dirtLimit: 0.3,
-                grassLimit: 0.7
-            }
+        const frameBuffer = PIXI.RenderTexture.create({ width: 512, height: 512 })
+        appStep1.renderer.render(effects, { renderTexture: frameBuffer })
+        const pixels = appStep1.renderer.plugins.extract.pixels(frameBuffer)
+        const sceneSprite = new PIXI.Sprite(frameBuffer)
+        sceneSprite.anchor.set(0.5)
+        sceneSprite.position.set(256, 256)
 
-            const textureIdFilter = new PIXI.Filter(undefined, PIXI.Loader.shared.resources.texture_id_assign_frag.data, textureIdUniforms)
-            effects.filters = [textureIdFilter]
+        appStep1.stage.addChild(sceneSprite)
 
-            const frameBuffer = PIXI.RenderTexture.create({ width: 512, height: 512 })
-            appStep1.renderer.render(effects, { renderTexture: frameBuffer })
-            const pixels = appStep1.renderer.plugins.extract.pixels(frameBuffer)
-            const sceneSprite = new PIXI.Sprite(frameBuffer)
-            sceneSprite.anchor.set(0.5)
-            sceneSprite.position.set(256, 256)
+        // three stuff
+        const planeGeometry = new THREE.PlaneGeometry(meshSize, meshSize, meshVerts, meshVerts)
 
-            appStep1.stage.addChild(sceneSprite)
+        const sz = 1.0
+        planeGeometry.scale(sz, sz, sz)
 
-            // three stuff
-            const planeGeometry = new THREE.PlaneGeometry(meshSize, meshSize, meshVerts, meshVerts)
+        const material = new THREE.MeshPhongMaterial({ side: THREE.DoubleSide })
+        material.displacementScale = displacementScale
+        // material.flatShading = true
 
-            const sz = 1.0
-            planeGeometry.scale(sz, sz, sz)
+        const tex = new THREE.DataTexture(pixels, 512, 512)
+        tex.flipY = true
+        tex.needsUpdate = true
+        material.map = tex
 
-            const material = new THREE.MeshPhongMaterial({ side: THREE.DoubleSide })
-            material.displacementScale = displacementScale
+        // const displacementMap = 
+        const displacementMap = new THREE.TextureLoader().load(PIXI.Loader.shared.resources[`height_${chunkURL}`].url)
+        // displacementMap.rotation = Math.PI * 0.5
+        // material.displacementMap = new THREE.Texture() //  new THREE.Texture(PIXI.Loader.shared.resources[`height_${chunkURL}`].texture)  /// displacementMap
+        // material.displacementMap = new THREE.TextureLoader().load(`./isometric-heightmap-exploration/infiniworld/output/${chunkURL}.png`)
+        // material.displacementMap = new THREE.TextureLoader().load(PIXI.Loader.shared.resources[`height_${chunkURL}`].url)
+        // material.displacementMap = new THREE.Texture(heightTexture)
 
-            const tex = new THREE.DataTexture(pixels, 512, 512)
-            tex.flipY = true
-            tex.needsUpdate = true
-            material.map = tex
+        // const p = new THREE.Texture(PIXI.Loader.shared.resources[`height_${chunkURL}`].data)
+        // const p = new THREE.VideoTexture(PIXI.Loader.shared.resources[`height_${chunkURL}`].data)
+        // console.log(p)
+        material.displacementMap = displacementMap
+        // material.displacementMap = new THREE.ImageLoader(PIXI.Loader.shared.resources[`height_${chunkURL}`].data)
 
-            const displacementMap = new THREE.TextureLoader().load(`./isometric-heightmap-exploration/infiniworld/output/${chunkURL}.png`)
-            displacementMap.rotation = Math.PI * 0.5
-            material.displacementMap = displacementMap
+        const plane = new THREE.Mesh(planeGeometry, material)
+        plane.castShadow = true
+        plane.receiveShadow = true
 
-            const plane = new THREE.Mesh(planeGeometry, material)
-            plane.castShadow = true
-            plane.receiveShadow = true
+        plane.position.set(chunkOffset.x * meshSize, -chunkOffset.y * meshSize)
 
-            plane.position.set(chunkOffset.x * meshSize, -chunkOffset.y * meshSize)
+        baseObj.add(plane)
 
-            baseObj.add(plane)
+        renderer.render(scene, camera)
 
-            // const stats = Stats()
-            // // document.querySelector('.App').appendChild(stats.dom)
-
-            // const gui = new GUI()
-            // gui.width = 400
-            // gui.hide()
-
-            // const data = {
-            //     color: material.color.getHex(),
-            //     emissive: material.emissive.getHex(),
-            //     specular: material.specular.getHex(),
-            // }
-            // const planeData = {
-            //     width: 3.6,
-            //     height: 1.8,
-            //     widthSegments: 360,
-            //     heightSegments: 180,
-            // }
-
-            // const sunData = {
-            //     sunRotation: Math.PI,
-            //     sunHeight: 10
-            // }
-
-            // const sunFolder = gui.addFolder('Settings')
-            // sunFolder.add(sunData, 'sunRotation', 0, Math.PI * 2.0)
-            // sunFolder.add(sunData, 'sunHeight', 1, 40)
-            // sunFolder.add(material, 'displacementScale', 0, 4, 0.01)
-            // sunFolder.open()
-
-            /////////////////////////////////////////
-            // function regeneratePlaneGeometry() {
-            //     const newGeometry = new THREE.PlaneGeometry(
-            //         planeData.width,
-            //         planeData.height,
-            //         planeData.widthSegments,
-            //         planeData.heightSegments
-            //     )
-            //     plane.geometry.dispose()
-            //     plane.geometry = newGeometry
-            // }
-            renderer.render(scene, camera)
-            document.querySelector('.pixi-step-1').style.display = 'none'
+        document.querySelector('.pixi-step-1').style.display = 'none'
+        setTimeout(() => {
             callback()
-
         })
+
     }
 
 
