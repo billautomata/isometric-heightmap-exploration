@@ -7,18 +7,33 @@ import * as async from 'async'
 
 
 PIXI.settings.WRAP_MODE = PIXI.WRAP_MODES.REPEAT
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST
 
-const range = 8
+const vikingScale = 1.0
+const vikingOffset = { x: 0, y: 0 }
+const textureScale = 10.0
+
+const range = 2     // chunk loading range
+
 const cameraDistance = 300
 const chunkSize = 512
 const meshSize = 10
 const meshVerts = 128
-const displacementScale = 20
+const displacementScale = 12
+
+const cameraWidth = 0.4 * meshSize * (1.0 / vikingScale)
+const cameraHeight = cameraWidth
 
 const spawnPoint = { x: 33263, y: 43986 }
 
-// spawnPoint.x = 65536 / 2
-// spawnPoint.y = 65536 / 2
+spawnPoint.x = 65536 / 2
+spawnPoint.y = 65536 / 2
+
+spawnPoint.x -= chunkSize 
+spawnPoint.y += chunkSize
+// spawnPoint.x = Math.floor(Math.random()*65536)
+// spawnPoint.y = Math.floor(Math.random()*65536)
+
 
 const step3Buffer = new ArrayBuffer(chunkSize * chunkSize * 4)
 const step3Pixels = new Uint8Array(step3Buffer)
@@ -30,6 +45,7 @@ export default function allSteps() {
     PIXI.Loader.shared.add('texture_dirt', './isometric-heightmap-exploration/infiniworld/dirt.png')
     PIXI.Loader.shared.add('texture_grass', './isometric-heightmap-exploration/infiniworld/grass.png')
     PIXI.Loader.shared.add('texture_rock', './isometric-heightmap-exploration/infiniworld/rock.png')
+    PIXI.Loader.shared.add('viking_idle', './isometric-heightmap-exploration/viking/idle.png')
     PIXI.Loader.shared.concurrency = 20
 
     const appStep1 = new PIXI.Application({
@@ -44,26 +60,41 @@ export default function allSteps() {
     const appStep2 = new PIXI.Application({
         width: chunkSize,
         height: chunkSize,
-        backgroundColor: 0xFFFF00,
+        backgroundColor: 0x000000,
         resolution: 1
     })
 
     const viewSprite = new PIXI.Sprite()
+    appStep2.stage.addChild(viewSprite)
 
     document.querySelector('.pixi-step-2').appendChild(appStep2.view)
 
-    // threejs section
     const scene = new THREE.Scene()
     // scene.add(new THREE.AxesHelper(5))
 
     const baseObj = new THREE.Object3D()
     scene.add(baseObj)
 
-    // const light = new THREE.DirectionalLight(0xffffff, 1)
-    // light.position.set(0, 0, 30)
-    // light.lookAt(baseObj.position)
-    // light.castShadow = true
-    // baseObj.add(light)
+    const light = new THREE.DirectionalLight(0xffffff, 1)
+    light.position.set(3, 10, 10)
+    light.lookAt(baseObj.position)
+    light.castShadow = true
+    light.shadow.mapSize.width = 4096;
+    light.shadow.mapSize.height = 4096;
+
+    const _shadowCamSize = meshSize * 4
+    light.shadow.camera.top = _shadowCamSize
+    light.shadow.camera.right = _shadowCamSize
+    light.shadow.camera.bottom = -_shadowCamSize
+    light.shadow.camera.left = -_shadowCamSize
+    light.shadow.camera.near = 0.01;
+    light.shadow.camera.far = 300;
+    light.shadow.camera.fov = 20;
+
+    const helper = new THREE.DirectionalLightHelper(light)
+
+    // scene.add(light)
+    // scene.add(helper)
 
     // const spotlight = new THREE.SpotLight(0xffffff, 2, 300, Math.PI*0.15)
     // spotlight.position.set(10, 100, 100)
@@ -95,10 +126,8 @@ export default function allSteps() {
 
     //Set up shadow properties for the light
 
-    const width = (range * 1.9) * meshSize
-    const height = width
 
-    const camera = new THREE.OrthographicCamera(width / - 2, width / 2, height / 2, height / - 2, 0.001, 1000);
+    const camera = new THREE.OrthographicCamera(cameraWidth / - 2, cameraWidth / 2, cameraHeight / 2, cameraHeight / - 2, 0.001, 1000);
     const a = cameraDistance
     camera.position.y = -a
     camera.position.z = a * Math.sqrt(3)
@@ -106,7 +135,7 @@ export default function allSteps() {
     const renderer = new THREE.WebGLRenderer({ preserveDrawingBuffer: true, autoClear: true })
     const threejsCtx = renderer.getContext()
     console.log('context', threejsCtx)
-    renderer.shadowMap.enabled = true
+    // renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // renderer.shadowMap.type = THREE.BasicShadowMap;
 
@@ -114,11 +143,24 @@ export default function allSteps() {
 
     document.querySelector('.three-displace-step').appendChild(renderer.domElement)
 
+    let vikingSprite
+    const finalPassUniforms = {
+        uRock: {},
+        uGrass: {},
+        uDirt: {},
+        texScale: textureScale,
+        cameraZoom: camera.zoom
+    }
+
     const controls = new OrbitControls(camera, renderer.domElement)
     // controls.screenSpacePanning = true //so that panning up and down doesn't zoom in/out
-    controls.addEventListener('change', () => { 
-        renderer.render(scene, camera) 
-        renderer.context.readPixels(0, 0, 512, 512, threejsCtx.RGBA, threejsCtx.UNSIGNED_BYTE, step3Pixels)
+    controls.addEventListener('change', () => {
+        console.log(camera.zoom)
+        vikingSprite.scale.set(vikingScale * camera.zoom)
+        finalPassUniforms.cameraZoom = camera.zoom
+        // finalPassUniforms.texScale = textureScale
+        renderer.render(scene, camera)
+        renderer.getContext().readPixels(0, 0, 512, 512, threejsCtx.RGBA, threejsCtx.UNSIGNED_BYTE, step3Pixels)
         viewSprite.texture = PIXI.Texture.fromBuffer(step3Pixels, 512, 512)
     })
 
@@ -132,13 +174,39 @@ export default function allSteps() {
         }
     }
 
-    PIXI.Loader.shared.load(() => {        
-        const finalPassUniforms = {
-            uRock: PIXI.Texture.from(PIXI.Loader.shared.resources.texture_rock.data),
-            uGrass: PIXI.Texture.from(PIXI.Loader.shared.resources.texture_grass.data),
-            uDirt: PIXI.Texture.from(PIXI.Loader.shared.resources.texture_dirt.data),
-            texScale: range
+    PIXI.Loader.shared.load(() => {
+
+        const size = 64.0
+        const nFrames = 10
+        const sheetWidth = 4
+
+        const textureAtlas = PIXI.Texture.from(PIXI.Loader.shared.resources.viking_idle.data)
+        const baseTexture = textureAtlas.castToBaseTexture()
+
+        const textures: PIXI.Texture[] = []
+        for (let i = 0; i < nFrames; i++) {
+            const x = i % sheetWidth
+            const y = Math.floor(i / sheetWidth)
+            textures.push(new PIXI.Texture(baseTexture, new PIXI.Rectangle(x * size, y * size, size, size)))
         }
+
+        vikingSprite = new PIXI.AnimatedSprite(textures)
+        vikingSprite.animationSpeed = 0.2 //1.0 / frameLength
+        vikingSprite.gotoAndPlay(0)
+        vikingSprite.anchor.set(0.5, 0.95)
+        vikingSprite.scale.set(vikingScale)
+
+        vikingSprite.renderable = true
+        vikingSprite.position.set(256 + vikingOffset.x, 256 + vikingOffset.y)
+        appStep2.stage.addChild(vikingSprite)
+
+
+
+
+        finalPassUniforms.uRock = PIXI.Texture.from(PIXI.Loader.shared.resources.texture_rock.data)
+        finalPassUniforms.uGrass = PIXI.Texture.from(PIXI.Loader.shared.resources.texture_grass.data)
+        finalPassUniforms.uDirt = PIXI.Texture.from(PIXI.Loader.shared.resources.texture_dirt.data)
+
         const finalPassFilter = new PIXI.Filter(undefined, PIXI.Loader.shared.resources.texture_id_to_ng_frag.data, finalPassUniforms)
 
         for (let x = 0; x <= range * 2; ++x) {
@@ -153,19 +221,19 @@ export default function allSteps() {
             setTimeout(() => {
                 finalRender()
                 done()
-            }, 100)
+            }, 10)
         })
 
         function finalRender() {
             renderer.render(scene, camera)
-            renderer.context.readPixels(0, 0, 512, 512, threejsCtx.RGBA, threejsCtx.UNSIGNED_BYTE, step3Pixels)
+            renderer.getContext().readPixels(0, 0, 512, 512, threejsCtx.RGBA, threejsCtx.UNSIGNED_BYTE, step3Pixels)
             // const viewSprite = new PIXI.Sprite()
             viewSprite.texture = PIXI.Texture.fromBuffer(step3Pixels, 512, 512)
             viewSprite.filters = [finalPassFilter]
             viewSprite.anchor.set(0.5, 0.5)
             viewSprite.position.set(chunkSize / 2, chunkSize / 2)
             viewSprite.scale.set(1, -1)
-            appStep2.stage.addChild(viewSprite)
+            // appStep2.stage.addChild(viewSprite)
         }
 
         async.series(fns)
@@ -207,7 +275,7 @@ export default function allSteps() {
         const textureIdUniforms = {
             uHeight: heightTexture,
             uSteep: steepTexture,
-            steepLimit: 0.2,
+            steepLimit: 0.5,
             waterLimit: 0.01,
             dirtLimit: 0.3,
             grassLimit: 0.7
@@ -231,7 +299,7 @@ export default function allSteps() {
         const sz = 1.0
         planeGeometry.scale(sz, sz, sz)
 
-        const material = new THREE.MeshPhongMaterial({ side: THREE.DoubleSide })
+        const material = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide })
         material.displacementScale = displacementScale
         // material.flatShading = true
 
@@ -240,7 +308,7 @@ export default function allSteps() {
         tex.needsUpdate = true
         material.map = tex
 
-        // const displacementMap = 
+
         const displacementMap = new THREE.TextureLoader().load(PIXI.Loader.shared.resources[`height_${chunkURL}`].url)
         // displacementMap.rotation = Math.PI * 0.5
         // material.displacementMap = new THREE.Texture() //  new THREE.Texture(PIXI.Loader.shared.resources[`height_${chunkURL}`].texture)  /// displacementMap
